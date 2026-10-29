@@ -7,49 +7,56 @@ const transactionSchema = {
   primaryKey: 'id',
   type: 'object',
   properties: {
-    id: {
-      type: 'string',
-      maxLength: 36 // Standardowa długość UUID (np. 550e8400-e29b-41d4-a716-446655440000)
-    },
-    type: {
-      type: 'string' // 'INCOME', 'EXPENSE', 'TRANSFER'
-    },
-    amount: {
-      type: 'number'
-    },
-    category: {
-      type: 'string'
-    },
-    date: {
-      type: 'number' // Timestamp ułatwiający sortowanie offline
-    },
-    deleted_at: {
-      type: 'number' // Miękkie usuwanie - jeśli wypełnione, serwer usunie rekord u wszystkich
-    },
-    version: {
-      type: 'number' // Rośnie o 1 przy każdej edycji, chroni przed nadpisaniem nowszych zmian starymi
+    id: { type: 'string', maxLength: 36 },
+    type: { type: 'string' },
+    amount: { type: 'number' },
+    category: { type: 'string' },
+    date: { type: 'number' },
+    deleted_at: { type: 'number' },
+    version: { type: 'number' },
+    title: { type: 'string' },
+    // Nowe pola dla funkcji OCR i rachunków
+    receipt_image: { type: 'string' }, 
+    splits: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          userId: { type: 'string' },
+          amount: { type: 'number' }
+        }
+      }
     }
   },
   required: ['id', 'type', 'amount', 'date', 'version']
 };
 
-let dbInstance: any = null;
+// ... (schemat pozostaje bez zmian)
+
+let dbPromise: Promise<any> | null = null;
+
+// ... (transactionSchema pozostaje bez zmian)
 
 export const getDB = async () => {
-  if (!dbInstance) {
-    dbInstance = await createRxDatabase({
-      name: 'budzet_pwa_db',
-      storage: getRxStorageDexie() // Zapisuje dane bezpośrednio w przeglądarce (IndexedDB)
-    });
+  // Przypisujemy obietnicę do obiektu window, aby przetrwała przeładowania Vite (HMR)
+  if (!(window as any).dbPromise) {
+    (window as any).dbPromise = (async () => {
+      const db = await createRxDatabase({
+        name: 'budzet_pwa_db_v5', // <--- v5 dla czystego startu
+        storage: getRxStorageDexie(),
+        ignoreDuplicate: true
+      });
 
-    await dbInstance.addCollections({
-      transactions: {
-        schema: transactionSchema
-      }
-    });
+      await db.addCollections({
+        transactions: {
+          schema: transactionSchema
+        }
+      });
+
+      return db;
+    })();
   }
-  return dbInstance;
+  return (window as any).dbPromise;
 };
 
-// Funkcja pomocnicza do bezpiecznego generowania UUID offline
 export const generateUUID = () => crypto.randomUUID();
